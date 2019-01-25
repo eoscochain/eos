@@ -24,6 +24,10 @@ struct Block {
     uint32_t context_free_action_count{};
 };
 
+enum TransactionStatus {
+    executed, soft_fail, hard_fail, delayed, expired, unknown
+};
+
 struct Transaction {
     bytes id;
 
@@ -33,24 +37,24 @@ struct Transaction {
 
     uint16_t block_seq; // the sequence number of this transaction in its block
 
+    TransactionStatus status;
+    unsigned net_usage_words;
+    uint32_t cpu_usage_us;
+
     uint32_t action_count{};
     uint32_t context_free_action_count{};
-};
-
-enum TransactionStatus {
-    executed, soft_fail, hard_fail, delayed, expired, unknown
 };
 
 struct TransactionTrace { // new ones will override old ones, typically when status is changed
     bytes id;
 
-    uint32_t block_num;
+    // uint32_t block_num;
 
-    bool scheduled;
+    // bool scheduled;
 
-    TransactionStatus status;
-    unsigned net_usage_words;
-    uint32_t cpu_usage_us;
+    // TransactionStatus status;
+    // unsigned net_usage_words;
+    // uint32_t cpu_usage_us;
 
     string exception;
 };
@@ -89,6 +93,6 @@ using ActionPtr = std::shared_ptr<Action>;
 FC_REFLECT_ENUM(kafka::TransactionStatus, (executed)(soft_fail)(hard_fail)(delayed)(expired)(unknown))
 
 FC_REFLECT(kafka::Block, (id)(num)(timestamp)(lib)(block)(tx_count)(action_count)(context_free_action_count))
-FC_REFLECT(kafka::Transaction, (id)(block_id)(block_num)(block_time)(block_seq)(action_count)(context_free_action_count))
-FC_REFLECT(kafka::TransactionTrace, (id)(block_num)(scheduled)(status)(net_usage_words)(cpu_usage_us)(exception))
-FC_REFLECT(kafka::Action, (global_seq)(recv_seq)(parent_seq)(account)(name)(auth)(data)(receiver)(auth_seq)(code_seq)(abi_seq)(block_num)(tx_id)(console))
+FC_REFLECT(kafka::Transaction, (id)(block_id)(block_num)(block_time)(block_seq)(status)(net_usage_words)(cpu_usage_us)(action_count)(context_free_action_count))
+FC_REFLECT(kafka::TransactionTrace, (id)(exception))
+FC_REFLECT(kafka::Action, (global_seq)(recv_seq)(parent_seq)(account)(name)(auth)(data)(receiver)(auth_seq)(code_seq)(abi_seq)(block_num)(block_time)(tx_id)(console))

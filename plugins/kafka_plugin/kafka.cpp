@@ -1,5 +1,6 @@
 #include "kafka.hpp"
 
+#include <eosio/chain/config.hpp>
 #include <fc/io/json.hpp>
 
 #include "try_handle.hpp"
@@ -95,6 +96,7 @@ std::pair<uint32_t, uint32_t> kafka::push_transaction(const chain::transaction_r
     auto t = std::make_shared<Transaction>();
     if(tx_receipt.trx.contains<transaction_id_type>()) {
         t->id = checksum_bytes(tx_receipt.trx.get<transaction_id_type>());
+        // deferred transaction's actions (maybe context free) are counted in the original initiation transaction
     } else {
         auto signed_tx = tx_receipt.trx.get<chain::packed_transaction>().get_signed_transaction();
         t->id = checksum_bytes(signed_tx.id());
@@ -106,15 +108,28 @@ std::pair<uint32_t, uint32_t> kafka::push_transaction(const chain::transaction_r
     t->block_time = block->timestamp;
     t->block_seq = block_seq;
 
+    t->status = transactionStatus(tx_receipt.status);
+    t->cpu_usage_us = tx_receipt.cpu_usage_us;
+    t->net_usage_words = tx_receipt.net_usage_words;
+
     consume_transaction(t);
 
     return {t->action_count, t->context_free_action_count};
 }
 
 void kafka::push_transaction_trace(const chain::transaction_trace_ptr& tx_trace) {
+    // bypass `onblock` transaction
+    if (not tx_trace->action_traces.empty()) {
+        const auto& first = tx_trace->action_traces.front().act;
+        if (first.account == chain::config::system_account_name and first.name == N(onblock)) {
+            return;
+        }
+    }
+
     auto t = std::make_shared<TransactionTrace>();
 
     t->id = checksum_bytes(tx_trace->id);
+    /*
     t->block_num = tx_trace->block_num;
     t->scheduled = tx_trace->scheduled;
     if (tx_trace->receipt) {
@@ -122,11 +137,11 @@ void kafka::push_transaction_trace(const chain::transaction_trace_ptr& tx_trace)
         t->cpu_usage_us = tx_trace->receipt->cpu_usage_us;
         t->net_usage_words = tx_trace->receipt->net_usage_words;
     }
+    */
     if (tx_trace->except) {
         t->exception = tx_trace->except->to_string();
+        consume_transaction_trace(t); // only persist tx which has exception
     }
-
-    consume_transaction_trace(t);
 
     for (auto& action_trace: tx_trace->action_traces) {
         push_action(action_trace, 0, t); // 0 means no parent
