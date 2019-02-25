@@ -187,6 +187,8 @@ namespace eosio { namespace chain {
       account_history_object_type,              ///< Defined by history_plugin
       action_history_object_type,               ///< Defined by history_plugin
       reversible_block_object_type,
+      stats_object_type, ///< Defined by kafka_plugin
+      producer_stats_object_type, ///< Defined by kafka_plugin
       OBJECT_TYPE_COUNT ///< Sentry value which contains the number of different object types
    };
 
