@@ -79,7 +79,7 @@ void kafka::push_block(const chain::block_state_ptr& block_state, bool irreversi
 
     auto& db = get_db();
 
-    if (irreversible) {
+    if (irreversible and block_state->block_num > 1) { // block 1 only occurred as irreversible block
         auto bc = db.get<block_cache_object, by_block_id>(block_state->id);
         Block b = fc::json::from_string(string(bc.block.cbegin(), bc.block.cend())).as<Block>();
 
@@ -196,16 +196,18 @@ void kafka::push_block(const chain::block_state_ptr& block_state, bool irreversi
     Buffer buffer (b->id.data(), b->id.size());
     producer_->produce(MessageBuilder(topic_).partition(partition_).key(buffer).payload(payload));
 
-    auto bc = db.find<block_cache_object, by_block_id>(block_state->id);
-    if (not bc) {
-        db.create<block_cache_object>([&](auto &bc) {
-            bc.block_id = block_state->id;
-            bc.block.assign(payload.cbegin(), payload.cend());
-        });
-    } else {
-        db.modify(*bc, [&](block_cache_object &bc) {
-            bc.block.assign(payload.cbegin(), payload.cend());
-        });
+    if (block_state->block_num == 1) { // block 1 only occurred as irreversible block
+        auto bc = db.find<block_cache_object, by_block_id>(block_state->id);
+        if (not bc) {
+            db.create<block_cache_object>([&](auto &bc) {
+               bc.block_id = block_state->id;
+               bc.block.assign(payload.cbegin(), payload.cend());
+            });
+        } else {
+            db.modify(*bc, [&](block_cache_object &bc) {
+               bc.block.assign(payload.cbegin(), payload.cend());
+            });
+        }
     }
 }
 
