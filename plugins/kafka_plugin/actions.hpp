@@ -77,6 +77,8 @@ CHAINBASE_SET_INDEX_TYPE(eosio::block_cache_object, eosio::block_cache_index)
 CHAINBASE_SET_INDEX_TYPE(eosio::stats_object, eosio::stats_index)
 CHAINBASE_SET_INDEX_TYPE(eosio::producer_stats_object, eosio::producer_stats_index)
 
+FC_REFLECT(eosio::block_cache_object, (block_id))
+
 namespace kafka {
 
 using namespace std;
