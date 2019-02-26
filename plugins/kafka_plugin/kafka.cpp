@@ -196,7 +196,7 @@ void kafka::push_block(const chain::block_state_ptr& block_state, bool irreversi
     Buffer buffer (b->id.data(), b->id.size());
     producer_->produce(MessageBuilder(topic_).partition(partition_).key(buffer).payload(payload));
 
-    if (block_state->block_num == 1) { // block 1 only occurred as irreversible block
+    if (block_state->block_num > 1) { // block 1 only occurred as irreversible block
         auto bc = db.find<block_cache_object, by_block_id>(block_state->id);
         if (not bc) {
             db.create<block_cache_object>([&](auto &bc) {
