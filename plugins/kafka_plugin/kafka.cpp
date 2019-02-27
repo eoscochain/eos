@@ -405,21 +405,30 @@ void kafka::push_action(const chain::action_trace& action_trace, uint64_t parent
                     // ilog("regproxy: ${extra}", ("extra", a->extra));
                     break;
                 }
-                /* case N(regproducer): {
+                case N(regproducer): {
                     const auto rp = fc::raw::unpack<regproducer>(data);
-                    a->extra = fc::json::to_string(rp, fc::json::legacy_generator);
+
+                    auto& db = get_db();
+                    auto p = db.find<producer_stats_object, by_producer>(rp.producer);
+                    if (not p) {
+                        db.create<producer_stats_object>([&](auto &p) {
+                           p.producer = rp.producer;
+                           p.produced_blocks = 0;
+                           p.unpaid_blocks = 0;
+                           p.claimed_rewards = asset();
+                        });
+                    }
+
                     break;
                 }
                 case N(unregprod): {
-                    const auto up = fc::raw::unpack<unregprod>(data);
-                    a->extra = fc::json::to_string(up, fc::json::legacy_generator);
+                    // const auto up = fc::raw::unpack<unregprod>(data);
                     break;
                 }
                 case N(rmvproducer): {
-                    const auto rp = fc::raw::unpack<rmvproducer>(data);
-                    a->extra = fc::json::to_string(rp, fc::json::legacy_generator);
+                    // const auto rp = fc::raw::unpack<rmvproducer>(data);
                     break;
-                } */
+                }
                 case N(claimrewards): {
                     const auto cr = fc::raw::unpack<claimrewards>(data);
                     cached_claimed_rewards_[a->global_seq] = claimed_rewards{
