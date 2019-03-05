@@ -63,6 +63,11 @@ void kafka_plugin::plugin_initialize(const variables_map& options) {
 
     ilog("Initialize kafka plugin");
 
+    chain_plugin_ = app().find_plugin<chain_plugin>();
+    auto& chain = chain_plugin_->chain();
+
+    EOS_ASSERT(chain.get_read_mode() == chain::db_read_mode::READ_ONLY, plugin_config_exception, "kafka_plugin can only be used in read-only mode");
+
     string compressionCodec = "snappy";
     if (options.count("kafka-compression-codec")) {
         switch (options.at("kafka-compression-codec").as<compression_codec>()) {
@@ -107,10 +112,6 @@ void kafka_plugin::plugin_initialize(const variables_map& options) {
     unsigned start_block_num = options.at("kafka-start-block-num").as<unsigned>();
     unsigned reversible_start_block_num = 0;
     if (start_block_num > 340) reversible_start_block_num = start_block_num - 340; // TODO: configure 340 as option
-
-    // add callback to chain_controller config
-    chain_plugin_ = app().find_plugin<chain_plugin>();
-    auto& chain = chain_plugin_->chain();
 
     chainbase::database& db = const_cast<chainbase::database&>( chain.db() ); // Override read-only access to state DB (highly unrecommended practice!)
     db.add_index<block_cache_index>();
