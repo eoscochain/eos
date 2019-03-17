@@ -138,17 +138,20 @@ void kafka::push_block(const chain::block_state_ptr& block_state, bool irreversi
         ++producer_stats_counter_; // increase counter
 
         if (not producer_schedule_) { // initial set producer schedule
-            producer_schedule_ = std::make_unique<producer_schedule>();
+            producer_schedule_ = std::make_unique<ProducerSchedule>();
             producer_schedule_->version = block_state->active_schedule.version;
             for (const auto& p: block_state->active_schedule.producers) {
-                producer_schedule_->producers.push_back(p.producer_name);
+                producer_schedule_->producers.push_back(p.producer_name.value);
             }
+
+            b->schedule = *producer_schedule_;
+
         } else if (block_state->active_schedule.version > producer_schedule_->version or // must stats when producer schedule changed
                     producer_stats_counter_ >= producer_schedule_->producers.size() * config::producer_repetitions) { // trigger stats every producing loop
             producer_stats_counter_ = 0; // reset counter
 
             for (const auto& p: producer_schedule_->producers) {
-                auto ps = db.get<producer_stats_object, by_producer>(p);
+                auto ps = db.get<producer_stats_object, by_producer>(name(p));
                 b->producer_stats.push_back(ProducerStats{
                     .producer = ps.producer,
                     .produced_blocks = ps.produced_blocks,
@@ -160,8 +163,10 @@ void kafka::push_block(const chain::block_state_ptr& block_state, bool irreversi
                 producer_schedule_->version = block_state->active_schedule.version;
                 producer_schedule_->producers.clear(); // clear old producers
                 for (const auto &p: block_state->active_schedule.producers) {
-                    producer_schedule_->producers.push_back(p.producer_name);
+                    producer_schedule_->producers.push_back(p.producer_name.value);
                 }
+
+                b->schedule = *producer_schedule_;
             }
         }
 
@@ -499,42 +504,45 @@ void kafka::push_action(const chain::action_trace& action_trace, uint64_t parent
                     // ignore any error of unpack
                 }
             } else if (a->name == N(transfer) and is_token(a->account)) {
+                std::unique_ptr<transfer> transfer_ptr;
                 try {
-                    const auto transfer_data = fc::raw::unpack<transfer>(data);
+                    transfer_ptr = std::make_unique<transfer>(fc::raw::unpack<transfer>(data));
+                } catch (...) {
+                    // ignore any error of unpack
+                }
+                if (transfer_ptr) {
                     // TODO: get table row
-                    a->extra = fc::json::to_string(transfer_data, fc::json::legacy_generator);
+                    a->extra = fc::json::to_string(transfer_ptr, fc::json::legacy_generator);
 
                     if (a->account == N(eosio.token)) {
-                        if (transfer_data.from == N(eosio.ram) or transfer_data.from == N(eosio.ramfee)) { // buy
+                        if (transfer_ptr->from == N(eosio.ram) or transfer_ptr->from == N(eosio.ramfee)) { // buy
                            auto it = cached_ram_deals_.find(a->parent_seq);
                            if (it != cached_ram_deals_.end()) {
-                               if (it->second.quantity.get_amount() == 0) it->second.quantity = transfer_data.quantity;
-                               else it->second.quantity += transfer_data.quantity;
+                               if (it->second.quantity.get_amount() == 0) it->second.quantity = transfer_ptr->quantity;
+                               else it->second.quantity += transfer_ptr->quantity;
                            }
-                        } else if (transfer_data.to == N(eosio.ram)) { // sell
+                        } else if (transfer_ptr->to == N(eosio.ram)) { // sell
                             auto it = cached_ram_deals_.find(a->parent_seq);
                             if (it != cached_ram_deals_.end()) {
-                                if (it->second.quantity.get_amount() == 0) it->second.quantity = transfer_data.quantity;
-                                else it->second.quantity += transfer_data.quantity;
+                                if (it->second.quantity.get_amount() == 0) it->second.quantity = transfer_ptr->quantity;
+                                else it->second.quantity += transfer_ptr->quantity;
                             }
-                        } else if (transfer_data.to == N(eosio.ramfee)) { // sell
+                        } else if (transfer_ptr->to == N(eosio.ramfee)) { // sell
                             auto it = cached_ram_deals_.find(a->parent_seq);
                             if (it != cached_ram_deals_.end()) {
-                                if (it->second.quantity.get_amount() == 0) it->second.quantity = -transfer_data.quantity;
-                                else it->second.quantity -= transfer_data.quantity;
+                                if (it->second.quantity.get_amount() == 0) it->second.quantity = -transfer_ptr->quantity;
+                                else it->second.quantity -= transfer_ptr->quantity;
                             }
-                        } else if (transfer_data.from == N(eosio.bpay) or transfer_data.from == N(eosio.vpay)) { // producer block/vote pay
+                        } else if (transfer_ptr->from == N(eosio.bpay) or transfer_ptr->from == N(eosio.vpay)) { // producer block/vote pay
                             {
                                 auto it = cached_claimed_rewards_.find(a->parent_seq);
-                                if (it != cached_claimed_rewards_.end() and it->second.owner == transfer_data.to) {
-                                    if (it->second.quantity.get_amount() == 0) it->second.quantity = transfer_data.quantity;
-                                    else it->second.quantity += transfer_data.quantity;
+                                if (it != cached_claimed_rewards_.end() and it->second.owner == transfer_ptr->to) {
+                                    if (it->second.quantity.get_amount() == 0) it->second.quantity = transfer_ptr->quantity;
+                                    else it->second.quantity += transfer_ptr->quantity;
                                 }
                             }
                         }
                     }
-                } catch (...) {
-                    // ignore any error of unpack
                 }
             }
         }
